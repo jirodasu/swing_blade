@@ -3,7 +3,7 @@ import sys
 import unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from main import (World, FPS, FIELD_TOP, FIELD_BOTTOM, W, LENGTH,
+from main import (App, World, FPS, FIELD_TOP, FIELD_BOTTOM, W, LENGTH,
                   LEVEL_FRAMES, MULTIPLIER_GRACE, MULTIPLIER_DECAY,
                   ENEMY_SCORE, GEM_SCORE, segment_distance, wrap)
 
@@ -23,18 +23,26 @@ class GameTests(unittest.TestCase):
         g.spawn_wait = 100000
         return g
 
-    def test_reversal_swings_to_opposite_direction_and_stops(self):
+    def test_movement_stop_freezes_current_angle_immediately(self):
         g = self.clean(True)
-        g.step(pointer=(150, 185))
-        for _ in range(90):
-            g.step()
-        self.assertLess(abs(wrap(g.angle-math.pi)), .02)
+        g.step(1, 0)
+        self.assertGreater(abs(g.omega), 0)
+        angle = g.angle
+        self.assertGreater(abs(wrap(g.angle-g.target_angle)), .1)
+        g.step()
+        self.assertEqual(g.angle, angle)
         self.assertEqual(g.omega, 0)
-        g.step(pointer=(120, 185))
-        self.assertGreater(abs(g.omega), .1)
-        for _ in range(90):
+        for _ in range(60):
             g.step()
-        self.assertLess(abs(wrap(g.angle)), .02)
+        self.assertEqual(g.angle, angle)
+
+    def test_mouse_pointer_position_following(self):
+        g = self.clean(True)
+        g.step(pointer=(160, 170))
+        self.assertEqual((g.x, g.y), (160, 170))
+        angle = g.angle
+        g.step(pointer=(160, 170))
+        self.assertEqual(g.angle, angle)
         self.assertEqual(g.omega, 0)
 
     def test_blade_contact_boosts_but_does_not_destroy_bullet(self):
@@ -137,6 +145,67 @@ class GameTests(unittest.TestCase):
     def test_segment_distance_clamps_to_endpoints(self):
         self.assertAlmostEqual(segment_distance(15, 0, 0, 0, 10, 0), 5)
         self.assertAlmostEqual(segment_distance(5, 3, 0, 0, 10, 0), 3)
+
+
+class InputTests(unittest.TestCase):
+    def app(self, touch=True):
+        from types import SimpleNamespace
+        app = App.__new__(App)
+        keys = ['MOUSE_BUTTON_LEFT','KEY_M','KEY_RETURN','KEY_T','KEY_ESCAPE','KEY_P',
+                'KEY_R','KEY_RIGHT','KEY_D','KEY_LEFT','KEY_A','KEY_DOWN','KEY_S','KEY_UP','KEY_W']
+        app.p = SimpleNamespace(**{key:key for key in keys}, mouse_x=48, mouse_y=342)
+        app.held = app.tap = False
+        app.p.btnp = lambda key: key=='MOUSE_BUTTON_LEFT' and app.tap
+        app.p.btn = lambda key: key=='MOUSE_BUTTON_LEFT' and app.held
+        app.web = SimpleNamespace(swingTouch=touch, swingBlurCount=0)
+        app.blur_seen=0
+        app.screen='game'
+        app.pause=app.input_lock=app.stick_active=app.sound=False
+        app.stick_vector=(0.,0.)
+        app.last_pointer=(48,342)
+        app.world=World(True,seed=1)
+        return app
+
+    def test_stick_release_and_centre_stop_player_and_blade(self):
+        app=self.app()
+        app.p.mouse_x=72
+        app.tap=app.held=True
+        x=app.world.x
+        app.update()
+        self.assertGreater(app.world.x,x)
+        app.tap=False
+        app.p.mouse_x=48
+        x,angle=app.world.x,app.world.angle
+        app.update()
+        self.assertEqual((app.world.x,app.world.angle),(x,angle))
+        app.p.mouse_x=72
+        app.update()
+        app.held=False
+        x,angle=app.world.x,app.world.angle
+        app.update()
+        self.assertEqual((app.world.x,app.world.angle),(x,angle))
+        self.assertEqual(app.world.omega,0)
+
+    def test_battlefield_touch_does_not_teleport_player(self):
+        app=self.app()
+        app.p.mouse_x,app.p.mouse_y=180,160
+        app.tap=app.held=True
+        xy=(app.world.x,app.world.y)
+        app.update()
+        self.assertEqual((app.world.x,app.world.y),xy)
+
+    def test_mouse_tracks_pointer_and_blur_cancels_stick(self):
+        app=self.app(False)
+        app.p.mouse_x,app.p.mouse_y=160,190
+        app.update()
+        self.assertEqual((app.world.x,app.world.y),(160,190))
+        app.stick_active=True
+        app.web.swingBlurCount=1
+        xy=(app.world.x,app.world.y)
+        app.update()
+        self.assertTrue(app.pause)
+        self.assertFalse(app.stick_active)
+        self.assertEqual((app.world.x,app.world.y),xy)
 
 
 if __name__ == '__main__':

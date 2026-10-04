@@ -18,7 +18,7 @@ small{display:block;margin-top:20px;color:#829eae;font-size:12px;line-height:1.7
 #help{position:fixed;bottom:max(2px,env(safe-area-inset-bottom));left:0;right:0;text-align:center;z-index:4;pointer-events:none;font-size:10px;color:#809fa9;background:#0009}
 </style></head><body>
 <div id="intro"><h1>SWING BLADE</h1><p>移動の反対方向へ剣を振り、敵機を斬ろう。<br>青い弾は消せません。剣で触れると得点倍率アップ。<br>緑の宝石を回収して得点を稼ごう。<br>自機の中心の点に弾が当たると終了。</p>
-<button id="boot" disabled>読み込み中…</button><small>START：スコアアタック ／ PRACTICE：無傷の練習<br>スマホ：指の位置へ移動 ／ PC：マウス移動・方向キー・WASD<br>II：一時停止 ／ MENU：タイトル ／ SND：音<br>動画で確認できたルールを再現した試作です。数値は仮調整。<br>起動時にインターネット接続が必要です。</small></div>
+<button id="boot" disabled>読み込み中…</button><small>START：スコアアタック ／ PRACTICE：無傷の練習<br>スマホ：戦場外・左下のスティックをフリック ／ PC：マウスポインターに追従・方向キー・WASD<br>II：一時停止 ／ MENU：タイトル ／ SND：音<br>まず INPUT TEST で操作を確認。移動を止めると剣もその場で停止。<br>動画で確認できたルールを再現した試作です。数値は仮調整。<br>起動時にインターネット接続が必要です。</small></div>
 <div id="help" hidden>青い弾：剣で倍率アップ・中心に当たると終了｜緑：宝石</div>
 <script>
 window.swingBlurCount=0;

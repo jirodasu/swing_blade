@@ -1,11 +1,12 @@
 # title: SWING BLADE - bullet scoring prototype
 # author: jirodasu
-# version: 0.2.0
+# version: 0.2.1
 """Video-observed Zanki rules; unknown numeric values are prototype tuning."""
 import math
 import random
 
-W, H, FPS = 240, 320, 60
+W, H, FPS = 240, 400, 60
+STICK_X, STICK_Y, STICK_RADIUS, STICK_DEADZONE = 48, 342, 32, 5
 FIELD_TOP, FIELD_BOTTOM = 40, 280
 LENGTH = 43
 MOVE_SPEED = 2.4
@@ -58,8 +59,7 @@ class World:
         return 1+self.age//LEVEL_FRAMES
 
     def practice_targets(self):
-        self.enemies = [dict(x=x, y=y, r=6, vx=0., vy=0., fire=999999, kind=0)
-                        for x, y in [(55., 110.), (185., 110.), (120., 230.)]]
+        self.enemies = [dict(x=175., y=120., r=6, vx=0., vy=0., fire=999999, kind=0)]
 
     def spawn(self):
         # These patterns are approximations, not recovered original source values.
@@ -127,19 +127,22 @@ class World:
             self.x = clamp(self.x+ux/n*MOVE_SPEED, 4, W-4)
             self.y = clamp(self.y+uy/n*MOVE_SPEED, FIELD_TOP+4, FIELD_BOTTOM-4)
         dx, dy = self.x-ox, self.y-oy
-        if math.hypot(dx, dy) > .05:
-            self.target_angle = math.atan2(-dy, -dx)
-        error = wrap(self.target_angle-self.angle)
-        # Move toward the opposite-travel direction without continuing whole turns.
-        self.omega = clamp((self.omega+error*ANGLE_SPRING)*ANGULAR_DAMPING, -MAX_OMEGA, MAX_OMEGA)
-        if abs(error) < ANGLE_SNAP and abs(self.omega) < ANGLE_SNAP:
-            self.angle, self.omega = self.target_angle, 0.
+        if math.hypot(dx, dy) <= .05:
+            self.omega = 0.
+            self.target_angle = self.angle
         else:
-            advance = self.omega
-            if advance*error > 0 and abs(advance) >= abs(error):
+            self.target_angle = math.atan2(-dy, -dx)
+            error = wrap(self.target_angle-self.angle)
+            # Move toward the opposite-travel direction without continuing whole turns.
+            self.omega = clamp((self.omega+error*ANGLE_SPRING)*ANGULAR_DAMPING, -MAX_OMEGA, MAX_OMEGA)
+            if abs(error) < ANGLE_SNAP and abs(self.omega) < ANGLE_SNAP:
                 self.angle, self.omega = self.target_angle, 0.
             else:
-                self.angle = wrap(self.angle+advance)
+                advance = self.omega
+                if advance*error > 0 and abs(advance) >= abs(error):
+                    self.angle, self.omega = self.target_angle, 0.
+                else:
+                    self.angle = wrap(self.angle+advance)
         self.trail.append((self.x, self.y, self.angle))
         self.trail = self.trail[-6:]
         if not self.practice:
@@ -169,8 +172,8 @@ class World:
                 surviving.append(e)
         self.enemies = surviving
         # Training also includes nonlethal bullets to learn multiplier scoring.
-        if self.practice and self.age % 150 == 0 and len(self.bullets) < 12:
-            self.bullets.append(dict(x=20., y=130., vx=.7, vy=.25, r=3, scored=False))
+        if self.practice and not self.bullets:
+            self.bullets.append(dict(x=8., y=155., vx=.7, vy=0., r=3, scored=False))
         live_bullets = []
         for b in self.bullets:
             bx, by = b['x'], b['y']
@@ -235,6 +238,8 @@ class App:
         self.pause = False
         self.input_lock = False
         self.last_pointer = (pyxel.mouse_x, pyxel.mouse_y)
+        self.stick_active = False
+        self.stick_vector = (0., 0.)
         self.web = None
         self.blur_seen = 0
         try:
@@ -250,12 +255,16 @@ class App:
         self.pause = False
         self.input_lock = True
         self.last_pointer = (self.p.mouse_x, self.p.mouse_y)
+        self.stick_active = False
+        self.stick_vector = (0., 0.)
 
     def update(self):
         p = self.p
         if self.web is not None and int(self.web.swingBlurCount) != self.blur_seen:
             self.blur_seen = int(self.web.swingBlurCount)
             self.input_lock = True
+            self.stick_active = False
+            self.stick_vector = (0., 0.)
             if self.screen == 'game' and self.world.state == 'play':
                 self.pause = True
         tap = p.btnp(p.MOUSE_BUTTON_LEFT)
@@ -281,6 +290,8 @@ class App:
             self.pause = not self.pause
             self.input_lock = True
         if self.pause:
+            self.stick_active = False
+            self.stick_vector = (0., 0.)
             self.last_pointer = (mx, my)
             return
         if self.input_lock:
@@ -290,12 +301,28 @@ class App:
             self.input_lock = False
         ux = int(p.btn(p.KEY_RIGHT) or p.btn(p.KEY_D))-int(p.btn(p.KEY_LEFT) or p.btn(p.KEY_A))
         uy = int(p.btn(p.KEY_DOWN) or p.btn(p.KEY_S))-int(p.btn(p.KEY_UP) or p.btn(p.KEY_W))
+        if self.world.practice and (p.btnp(p.KEY_R) or (tap and 140 <= mx < 226 and 316 <= my < 352)):
+            self.start(True)
+            return
         pointer = None
         touch = self.web is not None and bool(self.web.swingTouch)
         moved = (mx, my) != self.last_pointer
-        if not (ux or uy) and FIELD_TOP <= my < FIELD_BOTTOM and 0 <= mx < W:
-            if (touch and p.btn(p.MOUSE_BUTTON_LEFT)) or (not touch and moved):
-                pointer = (mx, my)
+        if tap and math.hypot(mx-STICK_X, my-STICK_Y) <= STICK_RADIUS+10:
+            self.stick_active = True
+        if not p.btn(p.MOUSE_BUTTON_LEFT):
+            self.stick_active = False
+        self.stick_vector = (0., 0.)
+        if self.stick_active:
+            dx, dy = mx-STICK_X, my-STICK_Y
+            d = math.hypot(dx, dy)
+            if d > STICK_DEADZONE:
+                strength = min(1., (d-STICK_DEADZONE)/(STICK_RADIUS-STICK_DEADZONE))
+                ux, uy = dx/d*strength, dy/d*strength
+                self.stick_vector = (ux, uy)
+            else:
+                ux = uy = 0.
+        elif not touch and not (ux or uy) and moved and FIELD_TOP <= my < FIELD_BOTTOM and 0 <= mx < W:
+            pointer = (mx, my)
         self.last_pointer = (mx, my)
         self.world.step(ux, uy, pointer)
         if self.sound:
@@ -379,8 +406,9 @@ class App:
             self.center('BULLETS STAY. BLADE CONTACT: x+1', 139, 12)
             self.center('CENTRE DOT HIT = GAME OVER', 155, 10)
             self.button('START / SCORE ATTACK', 190, 11)
-            self.button('PRACTICE / NO DEATH', 232, 12)
-            self.center('v0.2 / VIDEO RULES', 299, 5)
+            self.button('INPUT TEST / PRACTICE', 232, 12)
+            self.center('STICK / MOUSE / STOP TO FREEZE', 300, 5)
+            self.center('v0.2.1 / INPUT TEST', 320, 5)
             return
         p.text(10, 14, 'II', 7)
         p.text(39, 14, 'MENU', 5)
@@ -388,7 +416,18 @@ class App:
         p.text(78, 22, f'x{g.multiplier:02}', 10)
         p.text(144, 22, f'LV {g.level}', 11)
         p.text(10, 287, f'{g.age/FPS:05.1f}s  KILLS {g.kills}  GEMS {g.gems_collected}', 5)
-        self.center('PRACTICE / NO DEATH' if g.practice else 'CENTRE DOT ONLY / BULLETS CANNOT BE CUT', 305, 12)
+        p.circb(STICK_X, STICK_Y, STICK_RADIUS, 5)
+        p.circb(STICK_X, STICK_Y, STICK_DEADZONE, 1)
+        sx, sy = self.stick_vector
+        p.circ(STICK_X+sx*24, STICK_Y+sy*24, 10, 11 if self.stick_active else 5)
+        p.text(28, 384, 'MOVE', 5)
+        p.text(103, 361, 'RELEASE: STOP', 11)
+        p.text(103, 375, 'BLADE FREEZES', 5)
+        if g.practice:
+            p.rectb(140, 316, 86, 36, 12)
+            p.text(156, 331, 'RESET / R', 12)
+        else:
+            p.text(110, 328, 'AVOID BLUE BULLETS', 12)
         if self.pause or g.state != 'play':
             p.rect(20, 83, W-40, 184, 0)
             p.rectb(20, 83, W-40, 184, 12)
