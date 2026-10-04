@@ -17,11 +17,14 @@ button{padding:18px 26px;border:1px solid #55dceb;border-radius:8px;background:#
 small{display:block;margin-top:20px;color:#829eae;font-size:12px;line-height:1.7}
 #help{position:fixed;bottom:max(2px,env(safe-area-inset-bottom));left:0;right:0;text-align:center;z-index:4;pointer-events:none;font-size:10px;color:#809fa9;background:#0009}
 </style></head><body>
-<div id="intro"><h1>SWING BLADE</h1><p>移動だけで、巨大な剣を振り回そう。<br>ドラッグして移動 → 切り返して攻撃。<br>30秒生存に挑戦、または敵なし練習。</p>
-<button id="boot" disabled>読み込み中…</button><small>START：30秒サバイバル ／ PRACTICE：無傷の練習<br>PC：方向キー・WASD ／ P：一時停止 ／ M：音<br>起動時にインターネット接続が必要です。</small></div>
-<div id="help" hidden>ドラッグで移動・切り返しで攻撃｜左上：一時停止　右上：音</div>
+<div id="intro"><h1>SWING BLADE</h1><p>移動の反対方向へ剣を振り、敵機を斬ろう。<br>青い弾は消せません。剣で触れると得点倍率アップ。<br>緑の宝石を回収して得点を稼ごう。<br>自機の中心の点に弾が当たると終了。</p>
+<button id="boot" disabled>読み込み中…</button><small>START：スコアアタック ／ PRACTICE：無傷の練習<br>スマホ：指の位置へ移動 ／ PC：マウス移動・方向キー・WASD<br>II：一時停止 ／ MENU：タイトル ／ SND：音<br>動画で確認できたルールを再現した試作です。数値は仮調整。<br>起動時にインターネット接続が必要です。</small></div>
+<div id="help" hidden>青い弾：剣で倍率アップ・中心に当たると終了｜緑：宝石</div>
 <script>
 window.swingBlurCount=0;
+window.swingTouch=false;
+document.addEventListener('pointerdown',e=>{window.swingTouch=e.pointerType==='touch';});
+document.addEventListener('touchstart',()=>{window.swingTouch=true;},{passive:true});
 function suspend(){window.swingBlurCount++;const c=document.querySelector('canvas');if(c){c.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,button:0}));for(const key of ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d']){window.dispatchEvent(new KeyboardEvent('keyup',{key,bubbles:true}));}}}
 window.addEventListener('blur',suspend);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)suspend();});
