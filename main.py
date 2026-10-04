@@ -86,7 +86,7 @@ class World:
             if abs(error) > 3.10:
                 error = math.copysign(abs(error), self.omega if abs(self.omega) > .002 else 1)
             self.omega += error * .013 * min(1, speed)
-        self.omega = clamp(self.omega * .97, -.30, .30)
+        self.omega = clamp(self.omega * .50, -.30, .30)
         self.angle = wrap(self.angle + self.omega)
         self.trail.append((self.x + math.cos(self.angle)*LENGTH, self.y + math.sin(self.angle)*LENGTH))
         self.trail = self.trail[-10:]
